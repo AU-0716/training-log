@@ -112,6 +112,13 @@
   .copyday{background:none;border:1px solid var(--edge);border-radius:4px;color:var(--muted);font-size:11px;padding:4px 9px;cursor:pointer}
   .copyday:active{color:var(--stack);border-color:var(--stack)}
   .rec{display:flex;align-items:center;gap:10px;border-bottom:1px solid #24282c;padding:9px 2px}
+  .recg{display:flex;align-items:flex-start;gap:10px;border-bottom:1px solid #24282c;padding:10px 2px 9px}
+  .gname{flex:1;min-width:0;font-size:13px;line-height:1.4}
+  .glines{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto}
+  .gline{display:flex;align-items:center;gap:6px}
+  .gline .rval{font-size:16px;color:var(--stack);white-space:nowrap;text-align:right}
+  .gline .rval span{font-size:11px;color:var(--muted);font-family:inherit;font-style:normal;font-weight:400}
+  .gnote{margin-left:8px;font-size:11px;color:var(--muted)}
   .rec .rname{flex:1;font-size:13px}
   .rec .rname i{display:block;font-style:normal;font-size:11px;color:var(--muted)}
   .rec .rval{font-size:16px;color:var(--stack);white-space:nowrap}
@@ -194,8 +201,8 @@ const MENU = {
     {id:'rear_lunge',   name:'リアランジ',         sub:'スミス・片側', values:SMITH},
     {id:'machine_squat',name:'マシンスクワット',                       values:SQUAT},
     {id:'hip_thrust',   name:'ヒップスラスト',     sub:'スミス・片側', values:SMITH},
-    {id:'cable_back',   name:'ケーブルヒップエクステンション', sub:'キックバック', values:CABLE},
-    {id:'cable_side',   name:'ケーブルヒップエクステンション', sub:'キックサイド', values:CABLE},
+    {id:'cable_back',   name:'ケーブルヒップエクステンション', sub:'バック', values:CABLE},
+    {id:'cable_side',   name:'ケーブルヒップエクステンション', sub:'サイド', values:CABLE},
     {id:'hip_adductor', name:'ヒップアダクター',                       values:ADDUCT},
     {id:'adduction',    name:'アダクション',                           values:ADDUCT},
     {id:'abs',          name:'腹筋',              bodyweight:true, defaultReps:50}
@@ -382,13 +389,19 @@ $('#save').addEventListener('click',()=>{
 });
 
 /* ---------- コピー ---------- */
-const lineOf=r=>`${r.exName} ${r.weight?fmt(r.weight)+'kg':'自重'} ${r.reps}回 ${r.sets}セット${r.note?`（${r.note}）`:''}`;
+const setLine=r=>`${r.weight?fmt(r.weight)+'kg':'自重'} ${r.reps}回 ${r.sets}セット${r.note?`（${r.note}）`:''}`;
 function textOf(list){
   const by={}; list.forEach(r=>(by[r.date]=by[r.date]||[]).push(r));
   return Object.keys(by).sort().reverse().map(d=>{
     const rs=by[d].slice().sort((a,b)=>a.ts-b.ts);
     const ps=[...new Set(rs.map(r=>MENU[r.part]?MENU[r.part].label:''))].join('・');
-    return `${d.replace(/-/g,'/')}　${ps}\n`+rs.map(lineOf).join('\n');
+    const groups=[];
+    rs.forEach(r=>{
+      const g=groups.find(x=>x.id===r.exId);
+      if(g) g.list.push(r); else groups.push({id:r.exId,name:r.exName,list:[r]});
+    });
+    const body=groups.map(g=>g.name+'\n'+g.list.map(r=>'　'+setLine(r)).join('\n')).join('\n');
+    return `${d.replace(/-/g,'/')}　${ps}\n`+body;
   }).join('\n\n');
 }
 function copyText(text){
@@ -418,7 +431,7 @@ function renderHist(){
   const by={}; records.forEach(r=>(by[r.date]=by[r.date]||[]).push(r));
   const days=Object.keys(by).sort().reverse();
   days.slice(0,shown).forEach(d=>{
-    const rs=by[d].slice().sort((a,b)=>b.ts-a.ts);
+    const rs=by[d].slice().sort((a,b)=>a.ts-b.ts);
     const ps=[...new Set(rs.map(r=>MENU[r.part]?MENU[r.part].label:''))].join('・');
     const head=el('div','day');
     const h3=el('h3',null,d.replace(/-/g,'/'));
@@ -431,20 +444,33 @@ function renderHist(){
     cp.addEventListener('click',()=>copyText(textOf(rs)));
     head.appendChild(cp);
     box.appendChild(head);
+    const groups=[];
     rs.forEach(r=>{
-      const row=el('div','rec');
-      row.appendChild(el('div','rname',r.exName+(r.note?`<i>${r.note}</i>`:'')));
-      const val=el('div','rval');
-      val.innerHTML=(r.weight?`<span class="num">${fmt(r.weight)}</span><span>kg</span> `:'<span>自重</span> ')+`<span class="num">${r.reps}</span><span>回</span> <span class="num">${r.sets}</span><span>セット</span>`;
-      const del=el('button','del','×');
-      del.setAttribute('aria-label','この記録を削除');
-      del.addEventListener('click',()=>{
-        if(!confirm('この記録を削除しますか？')) return;
-        records=records.filter(x=>x.ts!==r.ts);
-        persist(); renderHist(); renderList(); renderSub(); toast('削除しました');
+      const g=groups.find(x=>x.id===r.exId);
+      if(g) g.list.push(r); else groups.push({id:r.exId,name:r.exName,list:[r]});
+    });
+    groups.forEach(g=>{
+      const block=el('div','recg');
+      block.appendChild(el('div','gname',g.name));
+      const lines=el('div','glines');
+      g.list.forEach(r=>{
+        const line=el('div','gline');
+        const val=el('div','rval');
+        val.innerHTML=(r.weight?`<span class="num">${fmt(r.weight)}</span><span>kg</span> `:'<span>自重</span> ')
+          +`<span class="num">${r.reps}</span><span>回</span> <span class="num">${r.sets}</span><span>セット</span>`
+          +(r.note?`<span class="gnote">${r.note}</span>`:'');
+        const del=el('button','del','×');
+        del.setAttribute('aria-label','この記録を削除');
+        del.addEventListener('click',()=>{
+          if(!confirm('この記録を削除しますか？')) return;
+          records=records.filter(x=>x.ts!==r.ts);
+          persist(); renderHist(); renderList(); renderSub(); toast('削除しました');
+        });
+        line.append(val,del);
+        lines.appendChild(line);
       });
-      row.append(val,del);
-      box.appendChild(row);
+      block.appendChild(lines);
+      box.appendChild(block);
     });
   });
   $('#more').hidden = days.length<=shown;
